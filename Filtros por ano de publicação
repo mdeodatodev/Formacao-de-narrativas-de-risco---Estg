@@ -1,0 +1,156 @@
+import csv, hashlib, json, os, random, requests, time, wikipedia
+from collections  import Counter
+from datetime     import datetime, timedelta
+from functools    import wraps
+from pandas       import DataFrame, read_csv
+from pathlib      import Path
+from typing       import Union, Set, List, Dict, Optional, Tuple
+from urllib.parse import quote_plus
+from bs4          import BeautifulSoup
+
+
+def timeit(func):
+  @wraps(func)
+  def wrapper(*args, **kwargs):
+    start = time.perf_counter()
+    result = func(*args, **kwargs)
+    end = time.perf_counter()
+    print(f"{func.__name__} took {end - start:.4f} seconds")
+    return result
+  return wrapper
+
+@timeit
+def get_drive_file(share_link: str, cache_dir='cached_files', file_type='json') -> Union[dict, list]:
+  Path(cache_dir).mkdir(exist_ok=True)
+  file_id = share_link.split('/d/')[1].split('/')[0]
+  cache_path = Path(cache_dir) / f'{file_id}.{file_type}'
+
+  if cache_path.exists():
+    if file_type == 'json':
+      with open(cache_path, 'r') as f:
+        return json.load(f)
+    return read_csv(cache_path).to_dict('records')
+
+  download_url = f'https://drive.google.com/uc?export=download&id={file_id}'
+
+  if file_type == 'json':
+    response = requests.get(download_url)
+    data = response.json()
+    with open(cache_path, 'w') as f:
+      json.dump(data, f)
+  else:
+    df = read_csv(download_url)
+    data = df.to_dict('records')
+    df.to_csv(cache_path, index=False)
+
+  return data
+
+@timeit
+def read_json_file(file_path:str) -> dict:
+  with open(file_path, mode='r') as file:
+    return json.load(file)
+
+@timeit
+def get_words_from_article(article:dict) -> list[str]:
+  content = article["content"]
+  word_tokens = content.split()
+  return word_tokens
+
+@timeit
+def get_all_words(articles:dict) -> list[str]:
+  all_words = []
+  for article in articles.values():
+    content = article["content"]
+    word_tokens = content.split()
+    for token in word_tokens:
+      all_words.append(token)
+  return all_words
+
+@timeit
+def get_sources(articles, most_common=100, to_csv=False):
+  sources = []
+  for article_key in articles:
+    if 'source' in articles[article_key]:
+      source = articles[article_key]['source']
+      if isinstance(source, dict):
+        source = source.get('name', str(source))
+      sources.append(source)
+
+  if to_csv:
+    DataFrame(sources, columns=['Source', 'Count']).to_csv('sources.csv', index=False)
+
+  common_sources = Counter(sources).most_common(most_common)
+
+  return common_sources
+
+@timeit
+def get_publications_by_year(articles):
+  years = []
+  for article_key in articles:
+    if 'publishedAt' in articles[article_key]:
+      published_date = articles[article_key]['publishedAt']
+      try:
+        year = datetime.strptime(published_date, '%Y-%m-%dT%H:%M:%SZ').year
+        years.append(year)
+      except ValueError:
+        print(f"Invalid date format: {published_date}")
+
+  year_counts = Counter(years)
+  return year_counts
+
+def get_wiki_info(source_name):
+  try:
+    search_results = wikipedia.search(source_name)
+    try:
+      summary = wikipedia.summary(source_name, sentences=5)
+    except wikipedia.exceptions.DisambiguationError as e:
+      print(e.options[0])
+      summary = wikipedia.summary(e.options[0], sentences=5)
+    except Exception:
+      summary = "No summary available."
+    return search_results, summary
+  except Exception as e:
+    return [], f"Error: {e}"
+
+def confirm_action(prompt):
+  while True:
+    response = input(f"{prompt} (Y/N): ").lower()
+    if response in ['y', 'yes']:
+      return True
+    if response in ['n', 'no']:
+      return False
+    print("Please enter Y or N")
+
+@timeit
+def download_sources_from_wikipedia(sources, output_file='news_sources_wiki.csv'):
+  if not confirm_action(f"Download Wikipedia info for {len(sources)} sources?"):
+    print("Operation cancelled")
+    return []
+
+  results = []
+  for source in sources:
+    search_results, summary = get_wiki_info(source)
+    results.append({
+      'Source': source,
+      'Search Results': '; '.join(search_results),
+      'Summary': summary
+    })
+
+  with open(output_file, 'w', newline='', encoding='utf-8') as f:
+    writer = csv.DictWriter(f, fieldnames=['Source', 'Search Results', 'Summary'])
+    writer.writeheader()
+    writer.writerows(results)
+  return results
+
+
+ARTICLES_FILE_URL = 'https://drive.google.com/file/d/1-5wW1otUDe1dUfJPCzNcP9azHt9U3Cl0/view?usp=share_link'
+MAIN_EMISSORS_URL = 'https://drive.google.com/file/d/1-IcAX0LUgGYGb1aMRAqDNcl5aIWoxN_N/view?usp=sharing'
+
+articles = get_drive_file(ARTICLES_FILE_URL, file_type="json")["articles"]
+emissors = get_drive_file(MAIN_EMISSORS_URL, file_type="csv")
+
+# Descobrir os anos com maior número de publicações
+publication_years = get_publications_by_year(articles)
+print("Publicações por ano:")
+for year, count in publication_years.most_common():
+  print(f"{year}: {count} publicações")
