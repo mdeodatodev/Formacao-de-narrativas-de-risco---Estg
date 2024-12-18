@@ -1,0 +1,22 @@
+
+#------------------------------CÓDIGO BASE GNEWS---------------------------#
+
+import requests
+from urllib.parse import  urlencode
+
+API_KEY  = "186746e9f158d9ba348cc8a5dde25111"
+BASE_URL = "https://gnews.io/api/v4/search?"
+
+params   = {
+    'q':      "university of sao paulo",
+    'apikey': API_KEY,    
+    'lang':   "en",
+    'max':    3,
+    'expand': "content"
+    }
+params   = urlencode(params)
+
+url = f"{BASE_URL}{params}"
+
+result = requests.get(url)
+dados  = result.json()
