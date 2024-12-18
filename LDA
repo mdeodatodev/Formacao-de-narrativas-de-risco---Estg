@@ -1,0 +1,65 @@
+!pip install gensim
+!pip install nltk
+!pip install spacy
+!pip install pandas
+!pip install -U pyLDAvis
+!pip install pyLDAvis==3.4.1
+!pip install gensim
+
+##importando biblioteca
+import gensim
+from gensim import corpora
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+import pandas as pd
+import pyLDAvis
+from pyLDAvis import gensim
+import pyLDAvis.gensim
+import nltk
+nltk.download('stopwords')
+nltk.download('punkt')
+
+##fazendo upload do arquivo
+from google.colab import files
+# Upload do arquivo
+uploaded = files.upload()
+
+##Rodando LDA com Topic Modeling 
+from gensim.models import LdaModel
+from gensim.corpora import Dictionary
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+import nltk
+
+# Baixa todos os pacotes necessários do NLTK
+nltk.download('all')
+
+# Parâmetros. Número de tópicos
+NUM_TOPICS = 46
+
+# Função de pré-processamento
+def preprocess_texts(texts):
+    stop_words = set(stopwords.words('english'))
+    processed_texts = []
+    for text in texts:
+        tokens = word_tokenize(text.lower())
+        filtered_tokens = [word for word in tokens if word.isalpha() and word not in stop_words]
+        processed_texts.append(filtered_tokens)
+    return processed_texts
+
+# Carregar os textos
+data_clean = data['content_clean'].dropna().tolist()
+processed_texts = preprocess_texts(data_clean)
+
+# Criar o dicionário e a bag-of-words (BoW)
+dictionary = Dictionary(processed_texts)
+corpus = [dictionary.doc2bow(text) for text in processed_texts]
+
+# Treinar o modelo LDA
+lda_model = LdaModel(corpus=corpus, id2word=dictionary, num_topics=NUM_TOPICS, passes=10, random_state=42)
+
+# Mostrar os tópicos
+topics = lda_model.print_topics(num_words=10)
+for topic_num, topic in topics:
+    print(f"Tópico {topic_num}: {topic}")
+
