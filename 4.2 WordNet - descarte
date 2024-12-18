@@ -1,0 +1,64 @@
+import pandas as pd
+from gensim.models import LdaModel
+from gensim.corpora import Dictionary
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords, wordnet
+import nltk
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+from google.colab import files
+
+# Baixa todos os pacotes necessários do NLTK
+nltk.download('all')
+
+# Parâmetros
+NUM_TOPICS = 46
+
+# Função para obter o sinônimo principal de uma palavra usando WordNet
+def get_primary_synonym(word):
+    synsets = wordnet.synsets(word)
+    if synsets:
+        return synsets[0].lemmas()[0].name()
+    return word
+
+# Função de pré-processamento
+def preprocess_texts(texts):
+    stop_words = set(stopwords.words('english'))
+    processed_texts = []
+    for text in texts:
+        tokens = word_tokenize(text.lower())
+        filtered_tokens = [word for word in tokens if word.isalpha() and word not in stop_words]
+        synonym_tokens = [get_primary_synonym(word) for word in filtered_tokens]
+        processed_texts.append(synonym_tokens)
+    return processed_texts
+
+# Carregar os dados
+try:
+    file_path = "seu_arquivo.xlsx"
+    df = pd.read_excel(file_path)
+except FileNotFoundError:
+    print(f"O arquivo {file_path} não foi encontrado. Por favor, faça upload do arquivo.")
+    uploaded = files.upload()
+    uploaded_file = next(iter(uploaded))  
+    df = pd.read_excel(uploaded_file)
+
+if 'content_clean' not in df.columns:
+    raise ValueError("A coluna 'content_clean' não foi encontrada no arquivo.")
+
+data_clean = df['content_clean'].dropna().tolist()
+
+# Processar os textos
+processed_texts = preprocess_texts(data_clean)
+
+# Criar o dicionário e a bag-of-words (BoW)
+dictionary = Dictionary(processed_texts)
+corpus = [dictionary.doc2bow(text) for text in processed_texts]
+
+# Treinar o modelo LDA
+lda_model = LdaModel(corpus=corpus, id2word=dictionary, num_topics=NUM_TOPICS, passes=10, random_state=42)
+
+# Mostrar os tópicos
+topics = lda_model.print_topics(num_words=10)
+for topic_num, topic in topics:
+    print(f"Tópico {topic_num}: {topic}")
+
